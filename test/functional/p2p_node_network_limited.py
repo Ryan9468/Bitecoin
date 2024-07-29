@@ -15,7 +15,6 @@ from test_framework.messages import (
     NODE_P2P_V2,
     NODE_WITNESS,
     msg_getdata,
-    msg_verack,
 )
 from test_framework.p2p import P2PInterface
 from test_framework.test_framework import BitcoinTestFramework
@@ -47,7 +46,7 @@ class NodeNetworkLimitedTest(BitcoinTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 3
-        self.extra_args = [['-prune=550', '-addrmantest'], [], []]
+        self.extra_args = [['-prune=550'], [], []]
 
     def disconnect_all(self):
         self.disconnect_nodes(0, 1)
@@ -93,7 +92,8 @@ class NodeNetworkLimitedTest(BitcoinTestFramework):
 
         # Wait until the full_node is headers-wise sync
         best_block_hash = pruned_node.getbestblockhash()
-        self.wait_until(lambda: next(filter(lambda x: x['hash'] == best_block_hash, full_node.getchaintips()))['status'] == "headers-only")
+        default_value = {'status': ''}  # No status
+        self.wait_until(lambda: next(filter(lambda x: x['hash'] == best_block_hash, full_node.getchaintips()), default_value)['status'] == "headers-only")
 
         # Now, since the node aims to download a window of 1024 blocks,
         # ensure it requests the blocks below the threshold only (with a
@@ -138,17 +138,7 @@ class NodeNetworkLimitedTest(BitcoinTestFramework):
 
         self.log.info("Requesting block at height 2 (tip-289) must fail (ignored).")
         node.send_getdata_for_block(blocks[0])  # first block outside of the 288+2 limit
-        node.wait_for_disconnect(5)
-
-        self.log.info("Check local address relay, do a fresh connection.")
-        self.nodes[0].disconnect_p2ps()
-        node1 = self.nodes[0].add_p2p_connection(P2PIgnoreInv())
-        node1.send_message(msg_verack())
-
-        node1.wait_for_addr()
-        #must relay address with NODE_NETWORK_LIMITED
-        assert_equal(node1.firstAddrnServices, expected_services)
-
+        node.wait_for_disconnect(timeout=5)
         self.nodes[0].disconnect_p2ps()
 
         # connect unsynced node 2 with pruned NODE_NETWORK_LIMITED peer
@@ -182,4 +172,4 @@ class NodeNetworkLimitedTest(BitcoinTestFramework):
         self.test_avoid_requesting_historical_blocks()
 
 if __name__ == '__main__':
-    NodeNetworkLimitedTest().main()
+    NodeNetworkLimitedTest(__file__).main()
